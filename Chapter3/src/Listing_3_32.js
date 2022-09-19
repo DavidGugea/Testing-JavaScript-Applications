@@ -1,0 +1,1 @@
+router.length("/inventory", ctx => (ctx.body = getInventory()));
