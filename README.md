@@ -1075,3 +1075,1162 @@ It’s your job to balance the maintenance cost of tests versus the value they p
 * Automated tests can’t fully replace quality assurance professionals. Automated tests complement the work of QA analysts by freeing them to do tasks that only humans can do, such as exploratory testing or providing detailed user-centric feedback.
 * QA and development teams must work collaboratively instead of seeing each other as adversaries. Developers should write rigorous automated tests to shorten the feedback loop and support QA’s validation tasks. QA professionals should communicate with engineering and product teams to define priorities and should provide detailed feedback on how to improve the product instead of setting the bar to an unreachable level.
 * Tests, just like code, have maintenance costs associated to them. The more often you have to update tests, the more expensive they are. You can reduce tests’ costs by keeping code readable, avoiding duplication, decreasing coupling between tests and application code, and separating your verifications into multiple tests to create transitive guarantees
+
+# 3. Testing techniques
+
+## Introduction
+
+Well-written tests have two main qualities: they break only when the application misbehaves, and they tell you precisely what’s wrong. Ideally, your tests should be sensitive enough to catch as many bugs as possible but sufficiently robust so that they fail only when necessary.
+
+## Organizing tests suites
+
+In Louis’s bakery, every assistant and pastry chef can easily find any ingredient at any time. Each kind of ingredient has its own separate shelf, which, in turn, has its own special place in the bakery, depending on when that ingredient is more commonly used in the baking process. There’s a clear logic to how items are organized. Flour, for, example, is kept right next to the shelf that has eggs, close to the countertop where the baker turns these ingredients into a silky-smooth batter.
+
+This systematic arrangement makes it easier for the bakery’s employees to work in parallel and to find and use whatever items they need. Because ingredients of the same kind are all kept together, it’s also easy to know when to order more. Louis’s bakery doesn’t let any of them rot or run out of stock.
+
+Well-organized tests have the same effect on the making of software as an organized kitchen has on the making of cakes. Organized tests facilitate collaboration by enabling developers to work in parallel with as few conflicts as possible. When developers put tests together cohesively, they decrease the application’s overall maintenance burden. They make software easy to maintain because they reduce repetition while increasing readability. The first step in organizing your tests is to decide what criteria you will use to separate them.
+
+Let’s consider that you’ve split the code for placing and tracking orders into two separate modules: cartController and orderController, shown in figure 3.1.
+
+![Figure](ScreenshotsForNotes/Chapter3/Figure_3_1.PNG)
+
+Even though these modules integrate, they have different functionalities, and, therefore, their tests should be written in separate files. Separating tests for cartController and orderController into different files is already a great start, but separating the functions within these modules is equally valuable.
+
+To create different groups of tests within a file, you can nest them within a describe block. For the cartController module, for example, your test file could look as follows.
+
+```JavaScript
+import { describe, test} from 'jest';
+
+describe("addItemToCart", () => {
+    // Groups different tests into a lobk called addItemToCart
+
+    test("add an available item to cart", () => {
+        // ...
+    });
+    
+    test("add an unavailable item to cart", () => {
+        // ...
+    });
+
+    test("add multiple items to cart", () => {
+        // ...
+    });
+});
+
+describe("removeFromCart", () => {
+    // Groups different tests into a block called removeFromCart
+    test("remove item from cart", () => {
+        // ...
+    });
+});
+```
+
+You can also use Jest’s describe blocks to keep helper functions within the scope of a single group of tests. If you had, for example, a utility function to add items to the inventory, instead of adding it to the file’s entire scope, you could place it within the describe block that needs it, as shown next and illustrated by figure 3.2.
+
+```JavaScript
+import { describe, test} from 'jest';
+
+describe("addItemToCart", () => {
+    // This function is available only within the describe block's callback.
+
+    const insertInventoryItem = () => {
+        // Directly insert an item in the database's inventory table
+    }
+
+    // Tests...
+    test("add an available item to cart", () => {
+        // ...
+    });
+});
+
+
+```
+
+![Figure](ScreenshotsForNotes/Chapter3/Figure_3_2.PNG)
+
+Nesting utility functions within describe blocks helps to indicate which tests need them. If insertInventoryItem is within the describe block for the addItemToCart function, you can be sure that it’s necessary only for that group of tests. When you organize tests this way, they become easier to understand and quicker to change because you know where to look for the functions and variables they use.
+
+These describe blocks also change the scope of hooks. Any beforeAll, afterAll, beforeEach, and afterEach hooks become relative to the describe block in which they’re located, as in the example in figure 3.3. For example, if you want to apply a specific setup routine to a few tests in a file, but not to all of them, you can group those tests and write your beforeEach hook within the describe block for those tests as follows.
+
+```JavaScript
+import { describe, test, beforeEach } from 'jest';
+
+describe("addItemToCart", () => {
+    const insertInventoryItem = () => { /* */ };
+
+    let item;
+
+    beforeEach(async () => {
+        // Runs once before each test in the addItemToCart describe block
+        item = await insertInventoryItem();
+    });
+
+    // Tests...
+    test("add an available item to cart", () => {
+        // You can use 'item' in here
+    });
+});
+
+describe("checkout", () => {
+    test("checkout non-existing cart", () => {
+        // The previous 'beforeEach' hook does not run before this test
+    });
+});
+```
+
+![Figure](ScreenshotsForNotes/Chapter3/Figure_3_3.PNG)
+
+The same applies to every hook. If you use a beforeAll hook, for example, it will run once before all the tests within the describe block it’s placed, as shown next and illustrated by figure 3.4. Listing 3.4
+
+```JavaScript
+import { describe, test, beforeEach, beforeAll } from 'jest';
+
+describe("addItemToCart", () => {
+    const insertInventoryItem = () => { /* */ };
+
+    let item;
+    beforeEach(async () => {
+        // Runs before each test in the addItemToCart describe block
+        item = await insertInventoryItem();
+    });
+
+    // Tests...
+});
+
+describe("checkout", () => {
+    const mockPaymentService = () => { /* */ };
+
+    // Runs once before all tests in the checkout describe block
+    beforeAll(mockPaymentService);
+
+    test("checkout non-existing cart", () => { /* */ });
+});
+```
+
+![Figure](ScreenshotsForNotes/Chapter3/Figure_3_4.PNG)
+
+By default, hooks that are outside of any describe blocks apply to the whole scope of a test file, as shown next.
+
+```JavaScript
+import { describe, test, beforeEach, beforeAll } from 'jest';
+
+// Runs before each tes tin the file, no matter in which describe block the test is
+beforeEach(clearDatabase);
+
+describe("addItemToCart", () => {
+    const insertInventoryItem = () => { /* */ };
+
+    let item;
+    beforeEach(async () => {
+        // Runs before each test in the addItemToCart describe block
+        item = await insertInventoryItem();
+    });
+
+    test("add an available item to cart", () => { /* */ });
+});
+
+describe("checkout", () => {
+    const mockPaymentService = () => { /* */ };
+
+    // Runs once before all tests in the checkout describe block
+    beforeAll(mockPaymentService);
+
+    test("checkout nonexisting cart", () => { /* */ });
+});
+
+// Runs once after all tests in the file finish
+afterAll(destroyDbConnection);
+```
+
+Jest executes hooks from the outermost to the innermost block. In the previous example, the order of execution would be the following:
+
+1. beforeEach ➝ clearDatabase
+2. beforeEach ➝ insertInventoryItem
+3. test ➝ add an available item to cart
+4. beforeEach ➝ clearDatabase
+5. beforeAll ➝ mockPaymentService
+6. test ➝ checkout nonexisting cart
+7. afterAll ➝ destroyDbConnection
+
+Nesting life cycle hooks has benefits that are similar to nesting utility functions. You know exactly where to look for them and the scope to which they apply.
+
+## Breaking down tests
+
+Ideally, tests should be as small as possible and focus on checking a single aspect of the unit under test.
+
+## Parallellism
+
+If you have four test files that take one second each, sequentially running them would take, in total, four seconds, as shown by figure 3.5. As the number of test files increase, so does the total execution time.
+
+![Figure](ScreenshotsForNotes/Chapter3/Figure_3_5.PNG)
+
+To speed up your tests, Jest can run them in parallel, as figure 3.6 demonstrates. By default, Jest will parallelize tests that are in different files.
+
+> ***PARALLELLIZING TESTS:*** Parallellizing tests mean using different threads to run test cases simultaneously.
+
+![Figure](ScreenshotsForNotes/Chapter3/Figure_3_6.PNG)
+
+Parallellizing tests can be beneficial if they are well isolated, but it can be problematic if they share data. For example, if you have two test files using the same database table, you may have different results depending on the order in which they run.
+
+If you can’t isolate your tests, make them run sequentially by passing Jest the runInBand option. It’s better to make your tests slow and reliable than fast and flaky.
+
+> ***FLAKY TESTS:*** A test is said to be “flaky” when its results may change, even though the unit under test and the test itself remain the same.
+
+```
+# To run tests sequentially
+jest --runInBand
+# Or, if you have encapsulated the `jest` command into an NPM script
+npm test -- --runInBand
+```
+
+In case you have tests that can run simultaneously within a test suite, you can use test.concurrent to indicate which ones Jest should execute concurrently, as follows.
+
+```JavaScript
+import { describe, test, beforeEach, beforeAll } from 'jest';
+
+// These tests will run concurrently, so make sure to isolate the data used by each one of them.
+describe("adddItemToCart", () => {
+    test.concurrent("add an available item to cart", async () => { /* */ });
+    test.concurrent("add an unavailable item to cart", async () => { /* */ });
+    test.concurrent("add multiple items to cart", async () => { /* */ });
+});
+```
+
+To control how many tests run at a time, you can use the -- maxConcurrencyOption and specify how many tests Jest can run simultaneously. To manage the number of worker threads spawned to run tests, you can use the --maxWorkers option and specify how many threads to spawn.
+
+Parallelizing tests can dramatically speed up execution time. And, because tests that run fast incentivize you to run them more often, I highly recommend you to adopt this approach. Its only downside is that you must be careful to make sure that tests are well isolated.
+
+## Global hooks
+
+Sometimes you may need to perform hooks before all tests begin or after all tests finish. You may need, for example, to start or stop a database process. Jest allows you to set up global hooks through two configuration options: globalSetup and globalTeardown. You can specify these options in your jest.config.js file. If you haven’t created one yet, you can place it right next to the package.json file in the root of your project.
+
+You can use Jest’s CLI to create a configuration file quickly. When you run jest --init, you will be prompted to answer a few questions that will be used to generate your jest.config.js file.
+
+The filenames passed to globalSetup and globalTeardown should export the functions that Jest will call before and after all your tests run, as follows.
+
+```JavaScript
+module.exports = {
+    testEnvironment: "node",
+    // Jest runs this file's exported asyn function once before all tests.
+    globalSetup: "./globalSetup.js",
+    // Jest runs this file's exported async function once after all tests.
+    globalTeardown: "./globalTeardown.js"
+}
+```
+
+A setup file that, for example, initializes a database would look something like this:
+
+```JavaScript
+const setup = async () => {
+    global._databaseInstance = await databaseProcess.start();
+};
+
+module.exports = setup;
+```
+
+Values assigned to the global object, like the one shown previously, will be available on the globalTeardown hook, too.
+
+Considering you have set up a database instance and assigned it to _databaseInstance on your globalSetup, you can use that same variable to stop that process once the tests have finished, as follows.
+
+```JavaScript
+const teardown = async () => {
+    await global._databaseInstance.stop();
+};
+
+module.exports = teardown;
+```
+
+In case the setup and teardown functions are asynchronous, like the ones we’ve just written, Jest will run them to completion before proceeding.
+
+## Atomicity
+
+When organizing tests, consider that any test should be capable of running adequately, even when isolated from all others. Running a test on its own should be no different from running it among another one thousand tests.
+
+Consider, for example, a few of the tests that you have previously written for the addItem function. For the sake of this example, I have removed the beforeEach hooks from the following describe block.
+
+```JavaScript
+import { describe, test, beforeEach, beforeAll } from 'jest';
+
+describe("addItem", () => {
+    test("inventory update", async () => {
+        // Sets to 1 the nubmer of cheesecakes available, and hcecks wheter adding once cheesecake to a cart updates the inventory adequately
+        inventory.set("cheesecake", 1);
+        await addItem("lucas", "cheesecake");
+        expect(inventory.get("cheesecake")).toBe(0);
+    });
+    
+    test("cart update", async () => {
+        // Tries to add a piece of cheesecake to a user's cart, and checks wheter the cart's content is an array containing a single cheesecake
+        await addItem("keith", "cheesecake");
+
+        expect(carts.get("keith")).toEqual(["cheesecake"]);
+    });
+
+    test("soldout items", async () => {
+        // Tries to add a cheescake, and expects the server's response's status to be 404
+        const failedAddItem = await addItem("lucas", "cheesecake");
+        expect(failedAddItem.status).toBe(404);
+    });
+});
+```
+
+In this case, the second test will always fail if the first one has run. On the other hand, the third test depends on the first to succeed.
+
+When tests interfere with one another, it can be hard to determine the root cause of bugs. Tests that are not atomic cause you to wonder whether the problem is in your test or your code.
+
+Having atomic tests also helps you get quicker feedback. Because you can run a test separately from all others, you don’t need to wait for a long test suite to finish before knowing whether the code you have written works.
+
+To keep tests atomic, it’s crucial to remember to write good setup and teardown hooks. For the sake of atomicity, add a beforeEach hook that adds a cheesecake to the inventory to the previous example and another that empties the user’s cart, as shown next.
+
+```JavaScript
+import { describe, test, beforeEach, beforeAll } from 'jest';
+
+describe("addItem", () => {
+    beforeEach(() => carts.clear());
+    beforeEach(() => inventory.set("cheesecake", 1));
+
+    test("inventory update", async () => {
+        await addItem("lucas", "cheesecake");
+        expect(inventory.get("cheesecake")).toBe(0);
+    });
+    
+    test("cart update", async () => {
+        await addItem("keith", "cheesecake");
+        expect(carts.get("keith")).toEqual(["cheesecake"]);
+    });
+
+    test("soldout items", async () => {
+        const failedAddItem = await addItem("lucas", "cheesecake");
+        expect(failedAddItem.status).toBe(404);
+    });
+});
+```
+
+Now, even with these hooks, the last test will fail. The first beforeEach hook you’ve added inserts a cheesecake into the inventory and, therefore, doesn’t cause the addItem function in the last test to fail.
+
+Because this last test is the only one that doesn’t require a cheesecake to be available, it’s better to avoid another hook. Instead, you can simply set the number of cheesecakes to zero within the test itself, as shown next.
+
+```JavaScript
+import { describe, test, beforeEach, beforeAll } from 'jest';
+
+describe("addItem", () => {
+    beforeEach(() => carts.clear());
+    beforeEach(() => inventory.set("cheesecake", 1));
+
+    test("inventory update", async () => {
+        await addItem("lucas", "cheesecake");
+        expect(inventory.get("cheesecake")).toBe(0);
+    });
+    
+    test("cart update", async () => {
+        await addItem("keith", "cheesecake");
+        expect(carts.get("keith")).toEqual(["cheesecake"]);
+    });
+
+    test("soldout items", async () => {
+        inventory.set("cheesecake", 0);
+        const failedAddItem = await addItem("lucas", "cheesecake");
+        expect(failedAddItem.status).toBe(404);
+    });
+});
+```
+
+Despite being excellent for encapsulating repetitive behavior in a clean and concise way, hooks can make your tests harder to read because they increase the distance between your test and its setup and teardown process.
+
+Avoiding hooks for particular cases makes tests more understandable because it causes all the relevant information to be closer to the actual testing code.
+
+When deciding whether to write a hook or an utility function, I’d advise you to think about how often you need to reproduce a certain scenario. If the scenario is needed for almost every test in a suite, I’d advise you to use a hook and consider it as “precondition” for the tests in that suite. On the other hand, if you don’t need to set up or tear down the exact same elements on every test, an utility function would probably be a better choice.
+
+## Writing good assertions
+
+It takes a unique baker to recognize a unique cake. When examining a batter’s consistency or a cake’s texture, an excellent pastry chef knows what to look for. Without rigorous quality control, you can’t bake tasty desserts.
+
+In the same way, excellent engineers know what to look for in the software they write. They write robust and precise assertions, catching as many bugs as possible without significantly increasing maintenance costs.
+
+In this section, I will teach you techniques to help you write better assertions. You will learn how to make them catch as many bugs as possible, without having to update tests too often, adding extra maintenance burden.
+
+## Assertions and error handling
+
+A test without assertions fails only if the application code can’t run. If you have a sum function, for example, you must add assertions to ensure it does what it must do. Otherwise, it might as well be doing anything else. Without assertions, you simply ensure that the sum function runs to completion.
+
+To ensure that your tests contain assertions, Jest provides you with utilities that make your tests fail in case they don’t run the number of assertions you expect.
+
+Consider, for example, an addToInventory function that adds items to the store’s inventory and returns the new quantity available. If the amount specified is not a number, it should fail and should not add any items to the inventory, as follows.
+
+```JavaScript
+const inventory = new Map();
+
+const addToInventory =  (item, n) => {
+    if (typeof n !== "number") throw new Error("quantity must be a number");
+    const currentQuantity = inventory.get(item) || 0;
+    const newQuantity = currentQuantity + n;
+    inventory.set(item, newQuantity);
+    return newQuantity;
+}
+
+module.exports = { inventory, addToInventory };
+```
+
+When testing this function, you must be careful not to create an execution path that could lead to no assertions ever running. Let’s use as an example the following test.
+
+```JavaScript
+import {inventory, addToInventory} from "./inventoryController";
+import { describe, test, beforeEach, beforeAll } from 'jest';
+
+beforeEach(() => inventory.set("cheesecake", 0));
+
+test("cancels operation for invalid quantities", () => {
+    try {
+        addToInventory("cheesecake", "not a number");
+    } catch (e) {
+        /// An assertion that runs only when th eaddToInventory call throws an error
+        expect(inventory.get("cheesecake")).toBe(0);
+    }
+});
+```
+
+This test will pass, but you won’t know whether it passed because the addToInventory function didn’t add an item to the inventory or because it didn’t throw any errors.
+
+If you comment the line that throws an error and rerun the test, as shown next, you will see that, despite the function being incorrect, the test still passes.
+
+```JavaScript
+const inventory = new Map();
+
+const addToInventory =  (item, n) => {
+    // Commenting this line still makes tests pass
+    // if (typeof n !== "number") throw new Error("quantity must be a number");
+    const currentQuantity = inventory.get(item) || 0;
+    const newQuantity = currentQuantity + n;
+    inventory.set(item, newQuantity);
+    return newQuantity;
+}
+
+module.exports = { inventory, addToInventory };
+```
+
+To guarantee that your test will run assertions, you can use expect.hasAssertions, which will cause your test to fail if the test doesn’t run at least one assertion.
+
+Go ahead and ensure that your test will run an assertion by adding expect.hasAssertions to it.
+
+```JavaScript
+import { inventory, addToInventory } from "./inventoryController";
+import { describe, test, beforeEach, beforeAll } from 'jest';
+
+beforeEach(() => inventory.set("cheesecake", 0));
+
+test("cancels operation for invalid quantities", () => {
+    // Causes the test to fail if it doesn't execute at least one assertion
+    expect.hasAssertions();
+
+    try {
+        addToInventory("cheesecake", "not a number");
+    } catch (e) {
+        // An assertion that runs only when th eaddToInventory call throws an error
+        expect(inventory.get("cheesecake")).toBe(0);
+    }
+});
+```
+
+Now consider that you also want to add an assertion that ensures that the inventory has only one item.
+
+```JavaScript
+import { inventory, addToInventory } from "./inventoryController";
+import { describe, test, beforeEach, beforeAll } from 'jest';
+
+beforeEach(() => inventory.set("cheesecake", 0));
+
+test("cancels operation for invalid quantities", () => {
+    // Causes the test to fail if it doesn't execute at least one assertion
+    expect.hasAssertions();
+
+    try {
+        addToInventory("cheesecake", "not a number");
+    } catch (e) {
+        // An assertion that runs only when th eaddToInventory call throws an error
+        expect(inventory.get("cheesecake")).toBe(0);
+    }
+
+    // An assertion that is always executed
+    expect(Array.from(inventory.entries())).toHaveLength(1);
+});
+```
+
+The previous test could still pass, even if the catch block was not executed. The expect.hasAssertions call within the test will ensure only that any assertions run, not that all of them run.
+
+To solve this problem, you can use expect.assertions to explicitly determine how many assertions you expect to run. For example, if you want two assertions to run, use expect.assertions(2). Using expect.assertions will cause your tests to fail whenever the number of assertions executed doesn’t match what you determined, as shown next.
+
+```JavaScript
+import { inventory, addToInventory } from "./inventoryController";
+import { describe, test, beforeEach, beforeAll } from 'jest';
+
+beforeEach(() => inventory.set("cheesecake", 0));
+
+test("cancels operation for invalid quantities", () => {
+    // Causes the test to fail if it doesn't execute at least one assertion
+    expect.assertions(2);
+
+    try {
+        addToInventory("cheesecake", "not a number");
+    } catch (e) {
+        // An assertion that runs only when th eaddToInventory call throws an error
+        expect(inventory.get("cheesecake")).toBe(0);
+    }
+
+    // An assertion that is always executed
+    expect(Array.from(inventory.entries())).toHaveLength(1);
+});
+```
+
+Because assertion counting is not always practical, a simpler and more readable alternative would be to check whether a function call throws an error. To perform this assertion, use Jest’s toThrow, as shown next.
+
+```JavaScript
+import { inventory, addToInventory } from "./inventoryController";
+import { describe, test, beforeEach, beforeAll } from 'jest';
+
+test("cancels operation for invalid quantities", () => {
+    // Causes the test to fail if the addToInventory function throws an error
+    expect(() => addToInventory("cheesecake", "not a number")).not.toThrow();
+    expect(inventory.get("cheesecake")).toBe(0);
+    expect(Array.from(inventory.entires())).toHaveLength(1);
+});
+```
+
+Because toThrow usually makes tests less verbose and easier to read, I tend to prefer it. I use it to validate both functions that should throw errors and functions that shouldn’t.
+
+## Loose assertions
+
+The goal of writing tests is for them to fail when your application doesn’t do what you want. When writing assertions, you want to ensure that they will be sensitive enough so that they can make tests fail whenever anything goes wrong.
+
+Again, let’s use your addToInventory function as an example. For this function, you could write an assertion that ensures that the result of addToInventory is a Number.
+
+```JavaScript
+import { inventory, addToInventory } from "./inventoryController";
+import { describe, test, beforeEach, beforeAll } from 'jest';
+
+// Empties the inventory
+beforeEach(() => inventory.clear());
+
+test("returned value", () => {
+    const result = addToInventory("cheesecake", 2);
+
+    // Checks whether the result is a number
+    expect(typeof result).toBe("number");
+});
+```
+
+Now think of how many possible results this assertion allows. Numbers in JavaScript can go from 5e-324 to precisely 1.7976931348623157e+308. Given this enormous range, it’s clear that the set of possible results accepted by the assertion is too big, as illustrated in figure 3.7. This assertion can guarantee that the addToInventory function won’t return, for example, a String or a boolean, but it can’t guarantee that the number returned is correct. By the way, you know what else is considered a Number in JavaScript? NaN, which stands for not a number.
+
+![Figure](ScreenshotsForNotes/Chapter3/Figure_3_7.PNG)
+
+The more values an assertion accepts, the looser it is.
+
+One way of making this assertion accept fewer values—make it “tighter”— is to expect the result to be bigger than a particular value, as shown next.
+
+```JavaScript
+import { inventory, addToInventory } from "./inventoryController";
+import { describe, test, beforeEach, beforeAll } from 'jest';
+
+// Empties the inventory
+beforeEach(() => inventory.clear());
+
+test("returned value", () => {
+    const result = addToInventory("cheesecake", 2);
+
+    // Checks whether the result is a number
+    expect(typeof result).toBeGreaterThan(1);
+});
+```
+
+The toBeGreaterThan assertion drastically reduces the number of accepted results, as you can see in figure 3.8, but it is still way looser than it should be.
+
+![Figure](ScreenshotsForNotes/Chapter3/Figure_3_8.PNG)
+
+The tighter and most valuable assertion you can write is an assertion that allows only a single result to pass, as shown in the following listing and illustrated by figure 3.9.
+
+![Figure](ScreenshotsForNotes/Chapter3/Figure_3_9.PNG)
+
+```JavaScript
+import { inventory, addToInventory } from "./inventoryController";
+import { describe, test, beforeEach, beforeAll } from 'jest';
+
+// Empties the inventory
+beforeEach(() => inventory.clear());
+
+test("returned value", () => {
+    const result = addToInventory("cheesecake", 2);
+
+    // Checks whether the result is a number
+    expect(typeof result).toBe(2);
+});
+```
+
+Ideally, your assertions should accept a single result. If your assertions customarily allow many results, it can be a sign that your code is not deterministic or that you don’t know it well enough. Loose assertions make it easier for tests to pass, but they make those tests less valuable because they might not fail when the application produces invalid output. **Writing tighter assertions makes it harder for your tests to pass when the application code has problems, making it easier to catch bugs.**
+
+> ****DETERMINISTIC CODE:*** A code is said to be deterministic when, given the same input, it always produces the same output.
+
+An assertion that, for example, verifies whether an array includes a value usually tells that you don’t know what the entire array should look like. Ideally, you should have written an assertion that checks the whole array.
+
+Negated assertions—assertions that ensure an output does not match another value—also generate loose assertions. For example, when you assert that an output is not 2, you accept an enormous range of values (all values, of all types, but 2), as shown in figure 3.10. Avoid writing negated assertions whenever possible.
+
+Writing loose assertions is acceptable when you want tests not to be tied to factors you can’t control, like true randomness. Assume that you are testing a function that generates an array with random numbers. When testing this function, you probably want to check the length of the array and the type of its items but not the array’s exact content.
+
+![Figure](ScreenshotsForNotes/Chapter3/Figure_3_10.PNG)
+
+To make it easier to control how loose your assertions are, Jest has asymmetric matchers. Asymmetric matchers allow you to determine which aspects of a particular output Jest should validate loosely and which ones it should validate tightly.
+
+Assume you have a function that returns the content of your inventory indexed by name. For auditing purposes, this function will also include the date at which the information was generated, as follows.
+
+```JavaScript
+import { inventory, addToInventory } from "./inventoryController";
+import { describe, test, beforeEach, beforeAll } from 'jest';
+
+const inventory = new Map();
+
+const getInveotyr = () => {
+    const contentArray = array.from(inventory.entries());
+
+    // Creates an object whose keys are the inventory item's names and whose values are each item's respective quantifiers
+    const contents = contentArary.reduce(
+        (contents, [name, quantity]) => {
+            return {...contents, [name]: quantity};
+        },
+    );
+
+    // Returns a new object including all the properties in contents and a date
+    return {...contents, generatedAt: new Date()};
+}
+```
+
+When testing this function, your date will change whenever the test runs. To avoid asserting on the exact time the inventory report was generated, you can use an asymmetric matcher to ensure that the generatedAt field will contain a date. For the other properties, you can have tight assertions, as shown in the following code excerpt. Listing 3.27 inventoryController.test.
+
+```JavaScript
+import { inventory, addToInventory } from "./inventoryController";
+import { describe, test, beforeEach, beforeAll } from 'jest';
+
+test("inventory contents", () => {
+    inventory
+        .set("cheesecake", 1)
+        .set("macarroon", 3)
+        .set("croissant", 3)
+        .set("eclaire", 7);
+
+    const result = getInventory();
+
+    // Expects the result to match the object passed to the toEqual method
+    expect(result).toEqual({
+        cheesecake: 1,
+        macarroon: 3,
+        croissant: 3,
+        eclaire: 7,
+        generatedAt: expect.any(Date)  // Allows the generatedAt property to be any date
+    });
+});
+```
+
+Asymmetric matchers can perform many different kinds of verifications. They can, for example, check whether a string matches a regular expression or whether an array contains a specific item. Check Jest’s
+
+## Using custom matchersIn the previous section, we’ve seen that, even though we want our assertions to be as strict as possible, in some instances, it’s still necessary to be flexible when it comes to verifying values.
+
+Just like when you encapsulate behavior into functions, you can encapsulate your verifications into new matchers.
+
+Let’s say, for example, that you are writing a test to ensure that the generatedAt field in the getInventory is not a date in the future. One of the ways you could do this is by manually comparing timestamps, as shown next.
+
+```JavaScript
+import { inventory, addToInventory } from "./inventoryController";
+import { describe, test, beforeEach, beforeAll } from 'jest';
+
+test("generatedAt in the past", () => {
+    const result = getInventory();
+
+    // Adds one millisecond to the current timestamp to ensure that the timestamps compared won't be the same. Alternatively, you could wait for one millisecond before calling Date.now.
+    const currentTime = Date.now() + 1;
+
+    // Checks whether the result's generatedAt property is smaller than the one generated by the test and stores a Boolean value
+    const isPastTimestamp = result.generatedAt().getTime() < currentTime;
+
+    // Checks whether the stored Boolean value is true
+    expect(isPastTimestamp).toBe(true);
+});
+```
+
+This test can be great when it passes, but when it fails, its feedback may not be as clear as you’d expect. Try, for example, to set the year in the generatedAt property to 3000 so that you can see what happens when the test fails.
+
+```JavaScript
+import { inventory, addToInventory } from "./inventoryController";
+import { describe, test, beforeEach, beforeAll } from 'jest';
+
+const inventory = new Map();
+
+const getInventory = () => {
+    const contentArray = Array.from(inventory.entries());
+
+    const contents = contentArray.reduce((contents, [name, quantity]) => {
+        return {...contents, [name]: quantity};
+    });
+
+    return {
+        ...contents,
+        generatedAt: new Date(new Date().setFullYear(3000))  // Creates a date in the year 3000
+    };
+};
+```
+
+Running your tests should yield the following output:
+
+```
+FAIL ./inventoryController.test.js
+    ✕ generatedAt in the past (7ms)
+
+    ● generatedAt in the past
+
+    expect(received).toBe(expected) // Object.is equality
+    Expected: true
+    Received: false
+```
+
+As you can see, the diff generated by Jest doesn’t provide much information. It says that you expected true to be false, but it doesn’t tell you anything about what the subject of your assertion was. When a test fails with such a generic difference, you will need to reread its code to determine what went wrong and what the exact difference was between the actual and expected results.
+
+To get access to more precise assertions, we will use jest-extended. The jest-extended module extends Jest’s assertions, providing you with even better and more flexible checks.
+
+Go ahead and install jest-extended as a dev dependency.
+
+To set up jest-extended so that you can use its assertions, update your jest .config.js, and add jest-extended to the list of files that should run after setting up the test environment, as follows.
+
+```JavaScript
+module.exports = {
+    testEnvironment: "node",
+    setupFilesAfterEnv: ["jest-extended"]
+}
+```
+
+Once you have done this, you will be able to use any of the assertions shipped with jest-extended.
+
+To make the test’s feedback clearer, we will use the toBeBefore assertion, which checks whether a Date is before another. Update your test so that it uses this new assertion, as shown next.
+
+```JavaScript
+import { inventory, addToInventory } from "./inventoryController";
+import { describe, test, beforeEach, beforeAll } from 'jest';
+
+
+test("generatedAt in the past", () => {
+    const result = getInventory();
+
+    // Creates a date that is one millisecond ahead of the current time.
+    // Alternatively, you could wait for a millisecond before generating a Date.
+    const currentTime = new Date(Date.now() + 1);
+
+    // Expects the result's generatedAt property to be before the date generated in the line above
+    expect(result.generatedAt).toBeBefore(currentTime);
+});
+```
+
+Now, when this test fails, the feedback provided by Jest will be way more precise:
+
+```
+FAIL ./inventoryController.test.js
+    ✕ generatedAt in the past (11ms)
+
+    ● generatedAt in the past
+
+    expect(received).toBeBefore()
+    Expected date to be before 2020-02-23T15:45:47.679Z but received:
+    3000-02-23T15:45:47.677Z
+```
+
+Now you know exactly what the test was checking and what the difference is between the two dates.
+
+Using precise assertions enables you to improve the quality of your test’s feedback by indicating what kind of output Jest should produce.
+
+Tests with precise assertions are way easier to read and take less time to fix because it’s easier to understand what went wrong.
+
+## Circular assertions
+
+Circular assertions are assertions that compare your application’s code to itself. You should avoid circular assertions because when comparing your code’s results to themselves, your tests will never fail.
+
+Let’s say, for example, that you create a route for returning the inventory’s content. This route uses the getInventory function you already have, as follows.
+
+```JavaScript
+router.length("/inventory", ctx => (ctx.body = getInventory()));
+```
+
+To facilitate testing this route, you may feel tempted to use getInventory again within your test.
+
+```JavaScript
+import { inventory, addToInventory } from "./inventoryController";
+import { describe, test, beforeEach, beforeAll } from 'jest';
+
+test("fetching inventory", async () => {
+    inventory.set("cheesecake", 1).set("macarroon", 2);
+    const getInventoryResponse = await sendGetInventoryRequest("lucas");
+
+    // Copies to a new object the properties in the getInventory function's result, 
+    // and includes a generatedAt property whose value is an assymmetric matches
+    // For the sake of this example, let's not compare the `generatedAt``` feild's value
+    const expected = {
+        ...getInventory(),
+        generatedAt: expect.anything()  // Allows the generatedAt property to have any value
+    };
+
+    // Because both the route and `expected` were generaetd based on `getInventory`
+    // you are comparing two outputs which come from the exact same piece of code:
+    // the unit under test !
+    expect(await getInventoryResponse.json()).toEqual(expected);
+    // Compares the server's response to hte object created within the test
+});
+```
+
+The problem with this approach is that, because both the route and the test depend on the same piece of code (getInventory), you end up comparing the application to itself. If there’s a problem in the getInventory route, it won’t cause this test to fail because the result you expect was also incorrect.
+
+Try, for example, changing getInventory so that it returns 1000 as the quantity for each item.
+
+```JavaScript
+const inventory = new Map();
+
+const getInventory = () => {
+    // Uses the inventory's entries to create an array of key and value pairs
+    const contentArray = Array.from(inventory.entries());
+
+    // Creates an object whose keys are the inventory item names and whose values are always set to 10000 and represent each item's respective quantnties
+    const contents = contentArray.reduce((contents, [name]) => {
+        return {...contents, [name]: 1000};
+    });
+
+    // Copies every property in contents to a new object, which also contains a generatedAt key whose value is a Date
+    return {...contents, generatedAt: new Date() };
+};
+```
+
+Even though the quantity of items in the inventory is now wrong, the test for your route will still pass.
+
+Circular assertions don’t tend to be a big problem if you are already testing the different parts of your application separately. In the previous case, for example, even though the route’s tests didn’t catch the bug, thorough tests for the inventoryController itself would have.
+
+Regardless of whether you could have caught that in a separate test, the tests for the route will pass even when they shouldn’t. This inaccurate feedback could cause confusion and, if you didn’t have rigorous tests for inventoryController, could have let the bug slip into production.
+
+A test that contains the expected result explicitly written into the assertion would have been far better. It would make the test more readable and facilitate debugging, as shown next.
+
+```JavaScript
+import { inventory, addToInventory } from "./inventoryController";
+import { describe, test, beforeEach, beforeAll } from 'jest';
+
+test("fetching inventory", async () => {
+    inventory.set("cheescake", 1).set("macarroon", 2);
+
+    const getInventoryResponse = await sendGetInventoryRequest("lucas");
+
+    // Creates an object literal without using any dependencies
+    const expected = {
+        cheesecake: 1,
+        macarroon: 2,
+        generatedAt: expect.anything()
+    };
+
+    // Notice how both the `actual` and `expected` outputs come from different places.
+    // Expects the server's response to match the object literal created within the test
+    expect(await getInventoryResponse.json()).toEqual(expected);
+});
+```
+
+Whenever possible, create separate utility functions for your tests instead of just reusing the application’s code. It’s preferable to have a bit of duplication or hardcoded expected results than to have tests that never fail.
+
+## Test doubles: Mocks, stubs, and spies
+
+Mocks, stubs, and spies are objects used to modify and replace parts of your application to ease or enable testing. As a whole, they’re called test doubles.
+
+* **Spies** record data related to the usage of a function without interfering in its implementation.
+* **Stubs** record data associated with the usage of a function and change its behavior, either by providing an alternative implementation or return value.
+* **Mocks** change a function’s behavior, but instead of just recording information about its usage, they have expectations preprogrammed.
+
+## Choosing what to test
+
+Louis’s bakery produces more desserts than any other place in town, with half the staff and twice the flavor. To keep up the pace and the quality, Louis has carefully thought about which quality control checks to perform and when. He is familiar with the Pareto principle and has focused on the 20% of tests which generate 80% of the results.
+
+Like Louis, we, as engineers, can focus on the 20% of tests that produce 80% of the results. Knowing what to test is valuable, but it’s even more relevant to determine what not to test.
+
+Ideally, you should have tests that touch every single line of your application, run every single branch of execution, and assert on all the behavior you want to enforce. But, in reality, things are not as sweet as they are in Louis’s bakery. Real-world projects have tight deadlines and limited resources. It’s up to you to make your software as safe as possible and your costs as low as you can.
+
+Having many tests can be great when it comes to quality assurance, but it might be too burdensome to update all of them. Refactoring a large codebase that has an immense amount of tests may require you to spend more time updating the tests than updating the codebase itself. It’s because of this cost that having few tests with stronger quality guarantees is better than having many tests that don’t instill confidence.
+
+## Don't test third-party software
+
+Choosing responsible suppliers, for example, might have taken Louis some time, but it did save him many headaches. Because he can trust that his suppliers provide him with high-quality ingredients, he has to spend less time inspecting them when they get to the bakery.
+
+In the same way that Louis is picky about his suppliers, we should be extremely picky about the third-party software we use. As long as other people’s software is well-tested, we don’t have to spend time testing it ourselves. You should test only the software that you write.
+
+As we have seen in chapter 2, it is advisable to have end-to-end tests that make sure that you are using third-party software as you should, but you should not write tests that cover only the third-party piece of software itself.
+
+Let’s again consider the addItem function we saw in chapter 2, shown in the next listing. This function adds an item to a cart by inserting a row into the database.
+
+```JavaScript
+const db = require("knex")(require("./knexfile").development);
+
+const addItem = (cartId, itemName) => {
+    return db("carts_items").insert({cartId, itemName});
+};
+
+module.exports = { createCart };
+```
+
+What you don’t want to do in this case is test if knex is inserting items in the database. That’s the responsibility of the library’s authors.
+
+In this case, you have the following two options: a) replace knex with a test double, and check if it’s called correctly; or b) spin up a test database, call createCart, and check the database to see if the row was inserted as you expected.
+
+In neither of these cases do you test knex itself. You always focus on your use of the library. Testing other people’s libraries is a wasted effort. It almost always means that you are spending time to write tests that already exist elsewhere.
+
+Even if the tests you add for the library do not exist in the project’s own repository, it’s better to submit them to the upstream version than to keep them in your own codebase. When you add tests to the upstream project, everyone using it benefits, including you, who won’t be the only one responsible for keeping them up-to-date. Collaboration creates a virtuous cycle of safe and well-tested software.
+
+## To mock, or not to mock: That's the question
+
+In the ideal world of tests, every project should have tests with different levels of isolation. You should have unit tests, which isolate a function as much as possible. You should have integration tests, which have some degree of mocking but still verify whether different pieces of your software work together. And you should have end-to-end tests, which barely do any mocking, if at all.
+
+In reality, we usually can’t afford to be so methodical about the way we write tests, and, therefore, we have to decide which parts of your code we will isolate and which we won’t.
+
+Again, consider the same addItem function we’ve seen in the previous section.
+
+```JavaScript
+const db = require("knex")(require("./knexfile").development);
+
+const addItem = (cartId, itemName) => {
+    return db("carts_items").insert({cartId, itemName});
+};
+
+module.exports = { createCart };
+```
+
+Because we don’t want to test knex, as we’ve already mentioned, we can choose to either replace knex with a test double—a “mock”—or call the function and then check the database directly.
+
+In the ideal world, we’d have time to write both tests: one with the test double and one without. In the real world, however, we must choose which one delivers the most value for the lowest cost in time and effort.
+
+In this case, mocking knex would require a tremendous amount of work. For that, you would need to create a piece of software that essentially emulates a database and replicates how knex interacts with it.
+
+Creating a test double for knex is not only time-consuming but also errorprone. It would be so complicated that you would probably need tests for your tests. And then, when there’s an update in knex, you’d have to update your test double, too.
+
+Now consider how hard it would be to not replace knex with a test double.
+
+Without a test double, you would have to spin a database and make sure that your test is well isolated from others. Those extra steps would make the test a bit slower, but they make it way easier and quicker to write.
+
+Look, for example, at the test we’ve written for this function in chapter 2.
+
+```JavaScript
+const { db, closeConnection } = require("./dbConnection");
+const { createCart } = require("./cart");
+
+test("addItem adds an item to a cart", async () => {
+    await db("carts_items").truncate();
+    await db("carts").truncate();
+
+    const [cartId] = await createCart("Lucas da Costa");
+    await addItem("cheesecake");
+
+    const result = await db.select().from("carts_items");
+    expect(result).toEqual([{ cartId, itemName: "cheesecake" }]);
+    await closeConnection();
+});
+```
+
+This test is almost as simple as a test that checks only the return value of a function. The only difference is that instead of saving the returned value to a variable, you have to access the database to get the result before you can check it.
+
+Comparing the difficulties of mocking knex and the small benefits it produces with how easy it is to write an integration test and the immense value it generates, it’s clear that an integration test is the best option for this scenario.
+
+As a rule of thumb, if mocking a dependency is too complicated, don’t mock it.
+
+Replace only the parts of your software that are either easy to replace or that can’t be used in your tests at all, such as integration with paid third-party services.
+
+Being able to write tests with different levels of isolation is great for obtaining precise feedback, but it creates a large amount of unnecessary overlap. These overlapping tests then become somewhat redundant and add costs without providing significant benefits when it comes to quality.
+
+## How much mocking is too much mocking ?
+
+When you mock a particular layer of your application, you prevent your tests from reaching everything underneath it.
+
+Consider, for example, that you have a route that uses the cartController module. The cartController uses a notifier module, which, in turn, calls a third-party API.
+
+By mocking CartController, you are choosing not to test all the layers underneath it; you are not running code that’s in the notifier module or in the third-party API.
+
+The more superficial the layer you choose to mock, the more you choose not to test. The more you want to hide complexity, the earlier you should mock.
+
+Mocking can be especially beneficial when working with legacy applications or applications that have no tests, for example. By using mocks, you can hide the layers that you haven’t yet refactored and therefore avoid testing code that is not ready to be tested yet. In figure 3.13, you can see which layers get hidden depending on where you place a test-double.
+
+![Figure](ScreenshotsForNotes/Chapter3/Figure_3_13.PNG)
+
+A downside of writing mocks is that they distance your test scenarios from real use-case scenarios. Therefore, tests that have more mocks provide weaker quality guarantees and make you less confident.
+
+In general, too much mocking is when you mock pieces of software that you could easily test without a mock.
+
+## When in doubt, choose integration tests
+
+Unit tests provide blazing fast and extremely precise feedback, but they don’t provide us with strong quality guarantees. End-to-end tests, on the other hand, are the strongest quality guarantees we can get, but they usually take a lot of time to run, provide generic feedback, and tend to be timeconsuming to write.
+
+Somewhere in between unit tests and end-to-end tests are integration tests, which can give us the best of both worlds. They provide considerably strong quality guarantees, run reasonably fast, and tend to be quick to write. Sometimes, integration tests are even quicker to write than more isolated tests, given that we have to do less mocking.
+
+Once again, for your addItem function, think about what each kind of test would have to do.
+
+```JavaScript
+const db = require("knex")(require("./knexfile").development);
+
+const addItem = (cartId, itemName) => {
+    return db("carts_items").insert({ cartId, itemName });
+};
+
+module.exports = { createCart };
+```
+
+* A very isolated unit test would mock knex and check only whether addItem uses knex correctly.
+* An integration test would call addItem and check the database.
+* A full-blown end-to-end test would spin up the server, open a browser, click the button that adds items to a cart, and check the cart listing page.
+
+In this case, a unit test would not provide solid guarantees. It would also be hard to write due to all the mocking you’d have to do, as I previously mentioned.
+
+An end-to-end test would instill high confidence that the software works. But it would be challenging to write and take a lot of time to run.
+
+The integration test, on the other hand, is quick to write, because we don’t have to use any mocks, and runs way faster than an end-to-end test. Because this test touches the database, it creates a secure guarantee that the function will work as expected. It is the kind of test that costs less to write and provides the most significant benefit.
+
+Integration tests usually balance cost and benefit better, so, whenever in doubt, choose integration tests.
+
+> ***NOTE:*** Ideally, you should try to stick to the pyramid shape, but also having a high proportion of integration tests can help you cut costs.
+
+## Code coverage
+
+Code coverage is a metric that indicates how much of your code is executed when you run tests.
+
+To understand how code coverage works, think about which lines of the removeFromCart function run depending on which test you execute.
+
+```JavaScript
+const addToInventory = (item, quantity) => {
+    if (typeof quantity !== "number") {
+        logError(
+            { quantity },
+            "could not add item to invenotyr because quantity was not a number"
+        );
+
+        throw new Error("quantity must be a number");
+    }
+
+    const currentQuantity = inventory.get(item) || 0;
+    const newQuantity = currentQuantity + quantity;
+    inventory.set(item, newQuantity);
+    logInfo(
+        { item, quantity, memoryUsage: process.memoryUsage().rss },
+        "item added to the inventory"
+    );
+
+    return newQuantity;
+};
+```
+
+If you run a test that passes a quantity argument whose type is a number, for example, none of the lines within the first if statement will run.
+
+```JavaScript
+const { addToInventory } = require("./inventoryController");
+
+// Replaces logger with a test double to make sure the test's output won't be polluted with the logger's messages
+jest.mock("./logger");
+
+// A test that covers approximately 80% of the lines in the addToInventory functino
+test("passing valid arguments", () => {
+    addToInventory("cheesecake", 2);
+});
+```
+
+If you consider this function exclusively, you’ll notice that your test covers approximately 80% of the addToInventory function’s lines. In case any invalid statements are within those lines, your tests will be able to catch them. If, however, you have an invalid statement in the 20% of lines that are uncovered, your tests won’t detect it.
+
+By looking at the parts of your code your tests aren’t reaching, you can detect possible blind spots and create tests to cover them.
+
+In this case, for example, you can write a test that passes a string as the second argument to addItemToCart so that you cover the remaining lines of that function, as shown next.
+
+```JavaScript
+// A test that covers approximately 75% of the lines in the addToInventory function
+test("passing valid arguments", () => {
+    addToInventory("cheesecake", 2);
+});
+
+// A test that covers the remaining lines in the addToInventory function
+test("passing invalid arguments", () => {
+    try {
+        addToInventory("cheesecake", "should throw");
+    } catch(e) {
+        // ...
+    }
+});
+```
+
+By paying attention to your test’s coverage, you were able to detect a blind spot in your test suite and make it more thorough.
+
+> ***IMPORTANT?*** By measuring which parts of your code are covered and, most importantly, which aren’t, you can make sure that all the possible branches of execution run during your automated testing process.
+
+## Automated coverage reports
+
+To see a report that indicates exactly which parts of the code your tests execute, run the project’s Jest executable with the --coverage option.
+
+TIP If you’re using NPM scripts to run your tests, as I recommend, you can obtain coverage reports with npm test -- --coverage.
+
+Once Jest finishes running tests and collecting data about the parts of code your tests are executing, it will create a folder named coverage in the root of your project. This new folder contains a complete coverage report.
+
+Finally, to see which parts of your code are covered, try using your browser to open the index.html within the lcov-report folder that’s inside the coverage directory. This report will highlight in red any pieces of code not executed by your tests.
+
+TIP In addition to using these reports to understand your blind spots, you can use the other “machine-friendly” files that Jest generates to keep track of your coverage using automated tools. You could, for example, upload your coverage reports to a third-party tool that allows you to track how your code coverage changed over time. Furthermore, you could use version-control checks, about which you’ll learn in chapter 12, to prevent others from merging code that reduces the amount of code covered by tests.
+
+## Coverage types
+
+When automatically generating code coverage reports with Jest, you should have seen a table at the bottom of your test’s summary indicating the percentage of code covered in the target files.
+
+That table contains four measurements of coverage: statement coverage, branch coverage, function coverage, and lines coverage. All of these measurements represent which parts of your code your tests execute, but their units of measurement are different, as follows:
+
+* **Statement coverage** considers the total number of statements in your code and how many of them run.
+* **Branch coverage** considers how many execution paths your tests have gone through considering the total number of paths that could’ve been taken.
+* **Function coverage** considers how many functions run out of the total number of functions your code contains.
+* **Line coverage** considers how many lines of code your tests execute, regardless of how many statements they contain or in which execution paths these lines are.
+
+All of these types of coverage are important, but the one to which I pay the most attention tends to be branch coverage.
+
+Branch coverage indicates that, during my tests, my code has gone through all the possible paths of execution it could’ve gone through. Therefore, it guarantees that whenever my code has to “make a choice,” all the possible choices are validated.
+
+## What coverage is good for and what it isn't
+
+Code coverage does not indicate how good your tests are. It’s perfectly possible to cover 100% of your code and still let bugs slip by.
+
+Imagine, for example, that you have a function that sums two numbers if they’re both even and divides one by the other if at least one is odd, as shown next.
+
+```JavaScript
+function sumOrDivide(a, b) {
+    if (a % 2 === 0 && b % 2 === 0) {
+        return a + b;
+    } else {
+        return a / b;
+    }
+}
+```
+
+If you write tests that run both of this function’s execution branches but don’t perform any assertions, you will have 100% coverage, but you won’t catch any bugs you may introduce.
+
+```JavaScript
+test("sum", () => {
+    sumOrDivide(2, 4);
+});
+
+test("multiply", () => {
+    sumOrDivide(2, 6);
+});
+```
+
+In case you change this function so that it always returns "cheesecake", for example, your coverage will remain at 100%, and your tests will still pass.
+
+Without making the necessary observations by writing assertions, you may have a high coverage but not catch any bugs.
+
+Additionally, your coverage may indicate your tests run all of your code’s possible execution branches but not all the possible faulty inputs.
+
+If you passed 1 as the first argument to this function and 0 as the second, for example, your function would return Infinity, which may not be the result you desire.
+
+Coverage represents how much of your code your tests cover, not how many of the possible inputs it passes. Therefore, you can’t guarantee you will find bugs unless you test all possible inputs, which is a pretty difficult task.
+
+> ***TIP:*** To understand why testing all possible inputs is difficult, if not impossible, think about how many different numbers you can represent in JavaScript.
+
+Another problem with coverage measurements is that they indicate which possible execution branches run, but not all the possible combinations of those branches.
+
+Suppose a specific combination of execution paths throws an error. In that case, you may not see it, because even though all branches are covered, the particular combination of branches necessary for the bug to occur may not run.
+
+Because of these reasons, code coverage on its own is a bad metric. It may show which parts of a program’s code are covered, but it doesn’t indicate which of its possible behaviors are covered, as James O. Coplien explains in his brilliant article “Why Most Unit Testing Is Waste”:
+
+> I define 100% coverage as having examined all possible combinations of all possible paths through all methods of a class, having reproduced every possible configuration of data bits accessible to those methods, at every machine language instruction along the paths of execution. Anything else is a heuristic about which absolutely no formal claim of cor-rectness can be made. The number of possible execution paths through a function is mode-rate: let’s say 10. The cross product of those paths with the possible state configurations of all global data (including instance data which, from a method scope, are global) and formal parameters is indeed very large. And the cross product of that number with the pos-sible sequencing of methods within a class is countably infinite. If you plug in some typical numbers you’ll quickly conclude that you’re lucky if you get better coverage than 1 in 1012. —James O. Coplien
+
+> ***IMPORTANT:*** The only guarantee code coverage gives you is that your program can run, not that it runs correctly.
+
+Instead of using code coverage as a metric on its own, I use it to understand which parts of my program I’ve forgotten to cover and to ensure that my team is always progressing toward more coverage, not less.
