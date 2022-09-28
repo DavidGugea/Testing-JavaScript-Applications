@@ -2234,3 +2234,215 @@ Because of these reasons, code coverage on its own is a bad metric. It may show 
 > ***IMPORTANT:*** The only guarantee code coverage gives you is that your program can run, not that it runs correctly.
 
 Instead of using code coverage as a metric on its own, I use it to understand which parts of my program I’ve forgotten to cover and to ensure that my team is always progressing toward more coverage, not less.
+
+# 5. Advanced backend testing techniques
+
+## Eliminating nondeterminism
+
+Because Louis put a lot of effort into perfecting each of his recipes, he wants everyone to follow them to the letter. He trained each of his pastry chefs to be as methodical as an airplane pilot. Louis knows that if every chef follows the same steps every time, each cake that comes out of the oven will be as tasty as the previous one.
+
+Repeatable recipes are crucial for the success of his bakery in the same way that repeatable tests are crucial for the success of a project.
+
+Repeatable tests are said to be deterministic.
+
+> ***DETERMINISTIC TESTS:*** Deterministic tests are the ones that, given the same input, always produce the same results.
+
+In this section, I will talk about possible sources of nondeterministic behavior in tests and explore solutions to it.
+
+Tests should always be deterministic. Otherwise, it will be hard for you to tell whether there’s a problem in your tests or in your application. They will gradually undermine the confidence you have in your test suite and allow bugs to slip in. Some people, like Martin Fowler, would go as far as saying that nondeterministic tests are useless (https://martinfowler.com/articles/nonDeterminism.html).
+
+Deterministic tests increase your confidence and therefore make you progress faster. Confidence in your tests enables you to change bigger chunks of code at a time because you can trust that they will fail only when the application doesn’t work.
+
+In the previous chapter, when we talked about how to deal with third-party API’s, for example, we were, essentially, making our tests deterministic. Because we eliminated the dependency on someone else’s service, we had full control over when our tests would pass. For those tests to work, you won’t depend on an internet connection or someone else’s service being available and providing consistent responses.
+
+But third-party APIs aren’t the only source of nondeterminism. You can often end up creating nondeterministic tests when running tests in parallel or dealing with shared resources, time-dependent code, and other factors that are out of your control. Especially when writing backend applications, you will often have to deal with these elements, and, therefore, you must be prepared to write deterministic tests covering them.
+
+Often, the best solution is to create test doubles to make nondeterministic code deterministic. When interacting with Internet-of-Things (IoT) devices, for example, you don’t want your tests to depend on those devices being available. Instead, you should use Jest’s mocks to simulate responses those devices would yield. The same is valid for dealing with randomness. If you have to use a random-number generator, like Math.random, mock it so that you eliminate randomness at its source.
+
+As a rule of thumb, you should mock everything you can’t control.
+
+Another technique we have previously used to make tests deterministic is to ensure that they all start from the same initial state.
+
+For tests to be deterministic, they always need to be given the same initial state. Otherwise, even if the unit under test operating over that state is deterministic, the final result will be different.
+
+> **NOTE:** By state, I mean the state that is relevant to the unit under test. For example, a function that applies a 50% discount to a user’s cart won’t generate a different result when given users with different names. In the case of the discount function, when referring to the state given to it, I’m referring to a cart’s content, not a user’s name.
+
+Mocking everything you can’t control and always providing tests with the same initial state should get you a long way, but a few exceptional cases have better solutions.
+
+When dealing with time-dependant code or simultaneous tests that can interfere in each other’s states, you don’t necessarily need to use Jest’s mocks. For those cases, I will go into detail on how to find a solution that yields better results with fewer compromises.
+
+## Parallelism and shared resources
+
+Baking a carrot cake, macaroons, and bread in the same oven at the same time doesn’t seem like such a good idea. Because each kind of pastry needs to be baked at a different temperature for different lengths of time, Louis’s chefs either use different ovens for different recipes or bake one kind of dessert at a time.
+
+Similarly, when you have simultaneous tests running against the same resources, the results can be disastrous.
+
+In the previous section, you had to start running your tests sequentially by using the --runInBand option to avoid flakiness. Parallelization would cause those tests to become flaky because they were operating over the same database and would, therefore, interfere with one another.
+
+Let’s use a simpler example to visualize exactly how this situation occurred and then see how we could solve it. Given that we could reproduce the problem accurately in the smaller sample, we could apply the same principles when dealing with a more complex application.
+
+Instead of creating an entire backend that operates against a database, let’s create a small module that updates the contents of a file. Both work upon a resource shared by multiple parallel tests. Thus we could adapt the solutions for one problem to another.
+
+Start by writing a small program we’ll use as an example. Create a module that changes the contents of a file that contains a count.
+
+```JavaScript
+const fs = require("fs");
+const filephat = "./state.txt";
+
+const getState = () => parseInt(fs.readFileSync(filepath), 10);
+
+const setState = n => fs.writeFileSync(filephat, n);
+
+const increment = () => fs.writeFileSync(filepath, getState() + 1);
+const decrement = () => fs.writeFileSync(filepath, getState() - 1);
+
+module.exports = { getState, setState, increment, decrement };
+```
+
+To validate this module, write two tests: one to increment the file’s count and the other to decrement it. Separate each test into a file of its own so they can run in parallel. Each test should reset the count, manipulate it through the exposed functions, and check the final count.
+
+```JavaScript
+const { getState, setState, increment } = require("../src/countModule");
+
+test("incrementing the state 10 times", () => {
+    setState(0);
+
+    for(let i = 0 ; i < 10 ; i++) {
+        increment();
+    }
+
+    expect(getState()).toBe(10);
+});
+```
+
+```JavaScript
+const { getState, setState, decrement } = require("../src/countModule");
+
+test("decrementing the state 10 times", () => {
+    setState(0);
+
+    for(let i = 0 ; i < 10 ; i++) {
+        decrement();
+    }
+
+    expect(getState()).toBe(-10);
+});
+```
+
+Repeating these tests about 10 or 20 times should be enough for you to see them exhibit flaky behavior. Eventually, they will either find a count that’s different from what’s expected or run into problems while trying to read and write to state.txt at the same time, which will cause the module to write NaN to the file.
+
+Tests that run in parallel but share the same underlying resource, like the test illustrated by figure 5.1, can find that resource in different states every time they run and, therefore, fail. In the previous example, we were using a file, but the same thing can happen when tests share the same database, as we’ve previously seen.
+
+![Figure](ScreenshotsForNotes/Chapter5/Figure1.PNG)
+
+The most obvious solution to this problem is to run tests sequentially, as we’ve done before by using the --runInBand option. The problem with this solution is that it can make your tests take longer to run. Most of the time, running tests sequentially is a good enough solution for many projects. But, when dealing with enormous test suites, it can adversely affect a team’s speed and make the development process more cumbersome.
+
+Instead of running tests sequentially, let’s explore a different solution so that we can still run them in parallel even though they share resources.
+
+A strategy I’d recommend is to run tests against different instances of your module, each one of them operating over a different resource.
+
+## Reducing costs while preserving quality
+
+Quickly baking a thousand terrible cakes is as bad as taking an entire day to cook a single sublime one. Louis’s bakery’s success depends not only on how tasty his desserts are, but also on how many items he can produce to cope with the astronomical demand. To produce tasty desserts in a short time, he had to figure out exactly which parts of the process needed to be done more carefully and which could run a bit more loosely.
+
+Writing a backend application may not be as pleasing to the senses as baking cakes, but when it comes to quickly delivering software that works, reducing costs and maintaining quality are still crucial.
+
+In this section, we will explore which details provide the most significant benefits and apply to the context of a backend application in a few of the concepts we have already learned.
+
+I have divided this section into the following three most relevant techniques for keeping and obtaining reliable quality guarantees with as little costs as possible:
+
+* Reducing overlap between tests
+* Creating transitive guarantees
+* Turning assertions into preconditions
+
+I will cover each technique in detail and also talk about how you can adapt them to the context of your project, considering the time and resources you have available.
+
+## Reducing overlap between tests
+
+Tests overlap when they run the same pieces of code and repeat each other’s verifications. A test like the one in figure 5.3, for example, touches many parts of your application, so it might overlap with plenty of other tests. Even though your tests may interact with your application from different points of view, by eliminating this overlap, you can often reduce the amount of code you have to maintain. The tricky part of removing overlap is keeping the quality high while still deleting tests. More tests don’t necessarily imply more quality, but they definitely increase the amount of code you have to maintain.
+
+![Figure](ScreenshotsForNotes/Chapter5/Figure_5_3.PNG)
+
+To decide which tests to write for a specific functionality, think about which parts of your application are executed for each test you run. As an example, let’s have a look at what happens when sending a request to the route that adds items to a cart.
+
+TIP It helps to visualize this as a tree of dependencies, with the topmost node being the server.js file that contains all routes.
+
+Now, compare the previous end-to-end test’s reach with the reach of an integration test like the one shown in figure 5.4.
+
+Because the addItemToCart function has fewer nodes below it in its dependency tree, it executes less code than the previous end-to-end test. Therefore, even though its focus is different, its reach is smaller.
+
+The integration test covers only the business logic within the controllers, whereas the end-to-end test covers everything from the middleware to the route specification itself. Even though both are capable of detecting whether the business logic has an error, only the end-to-end test can ensure that the application complies with the HTTP endpoints’ design.
+
+![Figure](ScreenshotsForNotes/Chapter5/Figure_5_4.PNG)
+
+Finally, let’s compare those two with a unit test that calls compliesToItemLimit directly, like the one shown in figure 5.5.
+
+![Figure](ScreenshotsForNotes/Chapter5/Figure_5_5.PNG)
+
+The previous tests could catch errors not only in compliesToItemLimit but also in other dependencies above it. Because compliesToItemLimit does not depend on any other pieces of software, testing it executes very few lines of code.
+
+Given that you have tight budgets and deadlines, how could you maximize the benefits of writing tests with as few tests as possible?
+
+To answer that question, consider how much of your code you can cover with each test. Assuming that you want to assert on as many aspects as possible with as little effort as necessary, you should choose the test that runs the largest portion of your application with the least code. In this case, that would be the end-to-end test.
+
+NOTE Usually, end-to-end tests are the most time-consuming tests to write and the ones that take the longest to run. In most situations, you’d choose to implement an integration test, considering how much easier it would be. But, because testing Node.js backends is exceptionally quick and reasonably straightforward, it’s often better to go for an end-to-end test.
+
+The problem with writing only a single test is that, by omitting the others, you could be missing essential assertions.
+
+Assume, for example, that your end-to-end test asserts only on the application’s response, whereas your integration test for addItemToCart also asserts on the database’s content. If you simply choose not to write the integration test, you could, for example, not know that your application inserted the wrong items on the database, even though it returned a valid response.
+
+To write less code but maintain the same guarantees, you should move up those assertions to your end-to-end test, which also covers addItemToCart. In this case, you still run the same verifications, but you centralize them in the tests whose entry point is the topmost nodes instead of spreading them across multiple tests, as shown in figure 5.6.
+
+![Figure](ScreenshotsForNotes/Chapter5/Figure_5_6.PNG)
+
+The downside of this approach is that, sometimes, you won’t be able to cover certain edge cases. For example, you couldn’t pass a null value to addItemToCart, because the route parameter will always be a string. Therefore, it might be possible that addItemToCart will fail unexpectedly when passed null values. On the other hand, one might also argue that, if this function is never passed a null value, then it’s not worth testing this case.
+
+By writing coarser tests with more assertions, you are choosing to reduce your costs by eliminating duplication in exchange for less precise feedback.
+
+The more time and resources you have, the more you can distribute your assertions into more granular tests that exercise your application through different endpoints and generate more precise feedback. Remember that, when it comes to tests, there’s no one-size-fits-all approach. It always “depends.”
+
+## Creating transitive guarantees
+
+The concept of a transitive guarantee introduced in chapter 3 can be especially useful when testing backend applications.
+
+Whenever it’s costly to assert on a particular aspect of your application, transitive guarantees help you reduce the amount of code necessary to obtain the same level of reliability.
+
+Take into account, for example, the tests for possible functions in cartController. Consider that these functions will do logging whenever you add or remove items from a card, regardless of whether these operations succeed. Because logging happens so frequently, you have to write plenty of repetitive assertions to cover it, as you can see in figure 5.7.
+
+![Figure](ScreenshotsForNotes/Chapter5/Figure_5_7.PNG)
+
+Repetitively asserting on the behavior of your logger is time-consuming and thus expensive. Whenever you have to assert on the logging aspect of a function, you must import the fs module, open the file, and assert on its contents. Between tests, you must also remember to clear the log file. If the logger adds extra metadata, like a timestamp, to the logged content, you must also take it into account when doing assertions. You will either have to ignore the timestamp or mock its source, which will add extra complexity to the test.
+
+To reduce duplication and still guarantee that your application does logging correctly, you can create a transitive guarantee. First, you will write a separate test for the log function, which ensures that the logger writes to the correct file and adds all the necessary metadata. Then, instead of repeating those expensive checks when testing each function that requires logger, you can simply verify whether log is called with the correct arguments because you already know it works.
+
+Doing this is as if you were saying, “I already know that my logger works because I have tested it. Now, I just want to make sure it’s invoked with the correct arguments.” This approach is illustrated by figure 5.8.
+
+![Figure](ScreenshotsForNotes/Chapter5/Figure_5_8.PNG)
+
+Because backends often deal with many dependencies that are orthogonal to your application, like logging, expensive assertions are exceptionally frequent. Whenever that’s the case, encapsulate the tests for those dependencies and just check if they’re appropriately called.
+
+TIP Instead of writing functions to perform assertions, use transitive guarantees to encapsulate them.
+
+## Turning assertions into preconditions
+
+You can reduce the number of tests you write by turning assertions into preconditions. Instead of writing separate tests to check a specific behavior, you rely on that behavior for other tests to pass.
+
+Consider, for example, the authentication middleware you built for your application. We didn’t need to write a specific test for each route to check whether it allows authenticated requests to go through. Instead, we test other aspects of the route by sending authenticated requests. If the authentication middleware doesn’t let authenticated requests to pass through, those other tests will fail.
+
+Because those other tests already depend on authentication, it’s as if you had embedded that assertion into how you exercise your application, as you can see in figure 5.9. By writing your tests in this manner, for each route you have, you save yourself an extra test.
+
+![Figure](ScreenshotsForNotes/Chapter5/Figure_5_9.PNG)
+
+On the other hand, a test for the authentication middleware that you can’t avoid is one that guarantees that your application refuses unauthenticated requests. Because testing other functionality within the route requires you to pass valid authentication headers, you can’t embed this verification into other tests.
+
+Another common way to embed assertions in your tests is by changing the way you create your mocks.
+
+When we used nock to mock endpoints, for example, we essentially built assertions into those mocks. We conditioned those mocks to respond only to the correct requests and to fail whenever they hadn’t been called.
+
+Take the test we’ve written for the route that fetches inventory items and depends on a third-party API, for example. Thanks to nock, that test would pass only if the request is sent with the correct parameters to the correct URL. Therefore, you don’t need to assert on how the fetch function is used.
+
+Whenever you condition your mocks to respond only to the desired arguments, you don’t need to assert on how that mock is called.
+
+If you’re not dealing with endpoints, an alternative is to use jest-when to achieve the same goal.
+
+In this case, again, you are trading granular feedback for less duplication. When these tests fail, it will take longer to figure out the bug’s root cause, but you will also spend fewer resources on writing tests.
