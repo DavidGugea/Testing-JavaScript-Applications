@@ -2446,3 +2446,179 @@ Whenever you condition your mocks to respond only to the desired arguments, you 
 If you’re not dealing with endpoints, an alternative is to use jest-when to achieve the same goal.
 
 In this case, again, you are trading granular feedback for less duplication. When these tests fail, it will take longer to figure out the bug’s root cause, but you will also spend fewer resources on writing tests.
+
+---
+---
+
+## Part 3. Business Impact
+
+---
+---
+
+# 12. Continuous integration and continous delivery
+
+## What are continuous integration and continuous delivery ?
+
+Successful businesses delight customers by communicating frequently, iterating quickly, delivering early, listening to feedback, and acting on it. These businesses focus on delivering delightful finished products rather than constantly working on mediocre new features.
+
+At the very core of these successful behaviors are two practices: continuous delivery and continuous integration.
+
+Doing continuous integration means frequently integrating your work with others’ work. Continuous delivery means delivering products to your customers early and often.
+
+In this section, you’ll understand how these two practices help make a business successful and how to apply them.
+
+## Continuous integration
+
+Louis’s cakes never fail to amuse a customer. The flavor of their filling, icing, and batter are always harmonic. Even though a separate pastry chef makes each part, these chefs frequently talk to each other and experiment combining their work as early as possible to ensure that ingredients go well together.
+
+By frequently updating others on what they’re baking, pastry chefs can ensure they’re baking the right quantities, of the right thing, at the right time. They won’t, for example, bake a chocolate frosting and have to throw it away because their partner was baking a vanilla cheesecake. Otherwise, that would be a weird cheesecake.
+
+Furthermore, by tasting the cake’s parts together, pastry chefs can figure out whether the icing needs to be less sugary to harmonize with the extra-sweet filling or vice versa.
+
+Combining ingredients early reduces waste and rework. If different parts of a cake don’t go well together, a pastry chef will have spent less time before finding that out and won’t have to throw away a large amount of his work.
+
+This practice—continuous integration—translates easily to the software world and yields similar benefits.
+
+Imagine you’re implementing a feature that allows customers to apply discount coupons to their orders. To implement this feature, you’ve split off of the project’s main branch and started committing to your own feature branch.
+
+As you work on your discount coupons mechanism, another developer is working on automatically discounting bulk orders. This developer’s work interferes with yours because it changes a few fundamentals of how discounts work.
+
+If your team practices continuous integration, you’ll avoid having to do a significant amount rework to integrate these two changes.
+
+Continuous integration makes work less frustrating and more predictable because you will have fewer surprises when the time comes to merge the branch with your implementation of discount coupons.
+
+Instead of doing a week’s worth of work only to figure out that what you’ve done on day two is no longer valid, you’ll frequently integrate your work with the project’s main branch, and so will your coworker. Therefore, you will constantly correct course as you develop your feature.
+
+In software engineering, constantly integrating your work with the project’s main branch is the equivalent of communicating the changes you’re doing, so that everyone is always working on top of a working version of your software.
+
+One major caveat is that the longer it takes to integrate work, the longer it takes to detect problems. Additionally, if integrating work is timeconsuming, this practice won’t be as efficient, and developers won’t integrate work as often.
+
+Therefore, to make it as quick and painless as possible to integrate work, you should automate whatever you can to make it easier to validate the software whenever there are changes. Among the tasks you should automate are executing static analysis, enforcing code style, running tests, and building the project, as shown in the pipeline in figure 12.1.
+
+TIP In addition to these automated checks, I recommend teams to adopt a code-review process before they merge code to the project’s main branch.
+
+Once these tasks are automated, it takes only a few seconds for a developer to know whether their work is valid when combined with the changes in the project’s main branch. Instead of delegating quality control to another team, you incorporate it into your build process so that you can tighten your feedback loop.
+
+![Figure](ScreenshotsForNotes/Chapter12/Figure_12_1.PNG)
+
+After automating your quality control processes and incorporating them into your build process, whenever a developer pushes work to the project’s repository, a continuous integration server should execute these automated tasks to continually monitor whether the software works as it should.
+
+In addition to checking if the code submitted passes the tests and other automated validations, running these tasks in a separate environment helps to eliminate any possible inconsistencies among different developers’ machines. Additionally, it excludes the possibility of having bugs or inconsistent code due to developers forgetting to run tests or use static analysis tools.
+
+> *WARNING:* Adopting a continuous integration tool does not necessarily mean you’re practicing continuous integration. Teams that perform continuous integration frequently merge their work with the project’s main branch. Automating builds and validations and having a continuous integration server is a way to make those frequent integrations safer and quicker. If you use a continuous integration tool, but you integrate your work with the project’s main branch only once a month, you’re not doing continuous integration.
+
+After you’ve adopted a continuous integration tool, you should then ensure that the build process of the project’s main branch is always working. If it breaks, you and your team must either fix it as soon as possible or rollback the changes that caused the failure. Otherwise, others will work on top of broken software.
+
+Additionally, if you have a broken build, you will forbid others from merging new code because, if they do, you won’t know whether their code has failures, too, given that the build is already broken. Furthermore, it will be more challenging to find the problem’s root cause because you’ll have more changes to investigate.
+
+IMPORTANT Your continuous integration builds should always be working.
+
+Besides having quality control checks incorporated into builds that always pass on a continuous integration server, you should make sure that those builds happen quickly.
+
+Like what happens with tests, the more time it takes for a build to run, the longer it takes for developers to notice they’ve made mistakes. Additionally, slow builds can impact the team’s delivery rhythm because it will take time for everyone to get their changes merged and validated.
+
+## Continuous integration services
+
+Since I’ve been working in tech, I’ve tried a wide array of continuous integration tools, from on-premises software to cloud services.
+
+Unless you work at Big Co. or have strict requirements that enforce you to build code in your own servers, I’d highly recommend you to use onpremise third-party CI software, such as Drone, JetBrains’ TeamCity, or Jenkins.
+
+Otherwise, I’d opt for a cloud-based service. When I’m building software, I want to focus on building software, not on fixing the machine on which my continuous integration is running.
+
+If you opt for a cloud offering, my particular favorite is CircleCI. Besides being easy to set up, the service is reliable, and has extensive documentation. Additionally, CircleCI makes it easy for you to debug failing builds by allowing you to SSH into the servers on which the builds run. This feature will enable you to update configurations manually in the server itself as you retry builds to understand what’s causing those builds to fail.
+
+Other excellent options are TravisCI, which I’ve used extensively in open source projects, JetBrains’ managed TeamCity service, and GitLab CI.
+
+The most important factors I’d consider when choosing one of these tools are their flexibility, security, and debuggability. Additionally, as you’ll see in this chapter’s final section, I consider it essential to be able to integrate those tools with your version-control system (VCS) provider.
+
+Regardless of the tool you choose, remember that it’s more important to practice continuous integrating your work with the project’s mainline than it is to select a fantastic continuous integration service.
+
+I’ve previously seen the same continuous integration service fail in some projects but succeed in others. The tool’s features were identical in both kinds of projects—what made the most difference was how disciplined developers were when it came to integrating their work.
+
+## Continous delivery
+
+One of the most valuable lessons you’ve learned from Louis’s pastry chefs is that delivering early and often helps businesses succeed.
+
+When developing new desserts, for example, it’s risky to bake a large batch at once and try to sell all of it, because the pastry chefs don’t yet know whether customers will like it.
+
+If the bakery’s staff bakes a large batch of a dessert that the clientele thinks is sour, for example, they’ll have wasted a significant amount of time and resources. Instead, they bake a small batch, sell it to a few customers, and listen to their feedback. Then they iteratively improve the dessert and, therefore, waste fewer resources in the process.
+
+As chefs try out these new recipes, they are also reluctant to present customers with terribly sour desserts, which would cause them not to come back. To avoid scaring customers with an experimental recipe, the bakery’s staff tastes the new desserts first and only then gradually sells the novel dessert to smaller cohorts of more receptive carbohydrate lovers.
+
+If their customers don’t like the new offering, the staff quickly stops the taste-testing and gets back to the kitchen to improve the recipe. Otherwise, they start selling a recipe to a larger and larger number of customers.
+
+Continuously testing their desserts with customers keeps the bakery’s staff focused on making desserts successful instead of always trying to develop brand-new ones that don’t sell well enough.
+
+Additionally, by baking fewer desserts at a time, pastry chefs are less likely to get the cooking time wrong as they get used to the new recipe.
+
+Finally, because they have to deliver new desserts frequently, they optimize the layout of their kitchen in favor of throughput and put in place the necessary metrics and processes for them to be able to determine whether a dessert is performing well.
+
+If you apply this same practice—continuous delivery—to the software world, you’ll see analogous advantages.
+
+As teams that practice continuous delivery complete their changes, instead of merely merging their work to the project’s main branch, they produce artifacts that they can immediately put into the hands of customers.
+
+To be able to deploy an up-to-date version of their software at any point in time, these teams perform continuous integration to ensure that each commit to the project’s main branch takes the software from one valid working state to another.
+
+IMPORTANT As illustrated in figure 12.2, continuous integration is a prerequisite to being able to perform continuous deployment.
+
+As developers write code, to avoid delivering features that customers may not like or that may have bugs that haven’t yet been caught by automated tests, they roll out changes to a small cohort of more receptive users first.
+
+![Figure](ScreenshotsForNotes/Chapter12/Figure_12_2.PNG)
+
+If anything goes wrong as they gradually roll out changes, teams that practice continuous delivery should have put in place mechanisms that allow them to quickly roll back changes and deploy a previous version of their software.
+
+To illustrate the benefits of practicing continuous deployment on a software project, consider that you’re making major changes to the bakery’s backend service so that it can display a customer’s order status and, if an order has been dispatched, its location.
+
+Imagine what would happen if, for example, you tried to deploy this feature all at once, and its deployment failed because of one of the many lengthy database migrations you added. In that case, it would be hard to discover what part of which migration caused problems because there are more lines of code to investigate.
+
+Had you been able to deploy your feature more frequently, and in smaller increments, you’d be able to find bugs and fix them more quickly because you’d have fewer lines of code to investigate as soon as the first failing migration ran.
+
+Additionally, deploying your order-tracking system more frequently and in smaller increments helps you tailor it to suit your customers’ needs. Instead of spending a lot of time on developing a detailed order-tracking system your customers may not need, you can build small parts at a time, listen to your customers’ feedback, and deliver the exact product they want.
+
+TIP Feature flags are a useful technique to enable teams to perform continuous deployment. By deploying new features behind feature flags, developers can send to production code that doesn’t yet impact users or that is available only for a small percentage of them. Besides allowing developers to ship code more often, feature flags reduce communication overhead because they separate the process of making features available from the process of deploying them. Additionally, you can use feature flags to hide certain parts of the application that aren’t yet ready for users to see, such as screens whose UI is incomplete. If you’d like to learn more about feature flags, I’d highly recommend Pete Hodgson’s post on this subject on Martin Fowler’s website at https://martinfowler.com/articles/feature-toggles.html.
+
+Imagine, for example, how disastrous it would be to spend three months building a detailed order-tracking system only to find out that customers care only about whether their order has been placed successfully.
+
+By splitting the order-tracking system into smaller deliverables, you would have reduced the risk of the project by getting early feedback. This early feedback would’ve helped you understand what matters to your customers and, therefore, avoid writing unnecessary code. In this case, for example, instead of writing an entire order-tracking system, you could’ve built a small piece of software that, once an order has been accepted, sends an SMS or email to the customers.
+
+IMPORTANT Delivering early and frequently shifts your focus from writing as much code as possible to providing as much value as possible. Code that sits on your version-control system doesn’t deliver any value to your customers. The earlier you put your software into the hands of customers, the earlier it starts delivering value.
+
+Finally, if you and your team have to deploy changes frequently, you’d have a stronger reason to automate as much of the deployment process as you can. Otherwise, these slow deployments would significantly slow down the feedback loop, thus diminishing the benefits of performing continuous delivery and reducing the whole team’s throughput.
+
+As I’ve illustrated, teams that perform continuous delivery reduce their deployments’ risks and usually spend less time on deployments due to the automation they’ve put in place. These teams get earlier feedback to build the product their customers want, not the product they think customers want.
+
+WARNING Continuous delivery is different from continuous deployment. When you perform continuous delivery, your team can deploy your project’s main branch to production at any point in time. Ideally, these deployments should be as automated as possible. Yet, a human still needs to decide to “push the button.” Continuous deployment takes continuous delivery a step further. Teams that practice continuous deployment have their code automatically deployed to production whenever a new successful build happens on the project’s main branch. Because there is no need for a human to press the “deployment” button, changes get to production even faster. When performing continuous deployment, every release is sent to production automatically, as shown in figure 12.3. As you move from continuous integration to continuous delivery, and then toward continuous deployment, the pace of releases becomes quicker, forcing you to implement more sophisticated deployment techniques and put in place more automation, better monitoring, and more reliable quality guarantees.
+
+![Figure](ScreenshotsForNotes/Chapter12/Figure_12_3.PNG)
+
+## The role of automated tests in a CI/CD pipeline
+
+Tasting a sample of a dessert before selling the whole batch to customers is an essential activity in Louis’s bakery. It helps ensure that whatever chefs deliver to customers will be up to Louis’s rigorous quality standards.
+
+Similarly, testing your software before delivering it to your customers helps you prevent shipping bugs.
+
+Testing your software is time-consuming. Therefore, the more often you have to do it, the more expensive your tests become.
+
+Considering that continuous delivery will enforce your team to deliver software more frequently, it can quickly ramp up your costs if you don’t have efficient automated tests.
+
+By having automated tests, you reduce deployments’ costs because machines can validate your software way more rigorously than a human could, much more quickly, for virtually zero cost.
+
+Automated testing is the most crucial technique to enable a team to perform continuous delivery because it allows you to increase your delivery frequency without significantly increasing your costs.
+
+These tests are integrated into what’s usually called a CI/CD pipeline, which runs in your continuous integration service and is responsible for automatically validating your software and preparing any artifacts necessary for a release.
+
+> WARNING Setting up a continuous integration routine is different from implementing a CI/CD pipeline. When performing continuous integration, your team will validate its software every time someone pushes code to the project’s main branch. This validation process may include trying to build the application, running tests, and performing static analysis. A CI/CD pipeline, besides validating your software, prepares any artifacts necessary for releases so that you can deploy them by “pushing a button.” If you are writing a Node.js application, for example, your CI/CD pipeline can validate it, build the necessary containers, and push them to a container repository. After your pipeline runs, you will be able to quickly deploy your software by pushing a button because you won’t have to build containers again. Instead, you’ll simply pull what’s already built. Additionally, to test the deployment process itself, you should have a separate production-like environment to which you deploy your software.
+
+As you increase the frequency of deployments, you’ll have to increase the number of automatic validations your CI/CD pipeline performs. These validations should give you quick and precise feedback so that you can detect mistakes earlier. Otherwise, you’re more likely to ship bugs.
+
+To make these validations as valuable as possible, besides your standard unit and integration tests, your CI/CD pipeline must include end-to-end tests and, if possible, acceptance tests similar to the ones you saw in chapter 10.
+
+End-to-end and acceptance tests are especially important in the context of a CI/CD pipeline because they’re the tests that most resemble your users’ behavior, and, therefore, are the ones more likely to prevent you from shipping bugs.
+
+IMPORTANT When building your CI/CD pipeline, make sure to include not only unit and integration tests but also end-to-end and acceptance tests.
+
+Besides making deployments quicker and cheaper, effective tests incentivize your team to deploy more often because they reduce the amount of work necessary for code to get to production. Like tests, the quicker your deployment is, the more often it will happen.
+
+Despite tests’ potential for detecting mistakes, they can’t always guarantee your application is bug-free. Therefore, they don’t eliminate the need for manual verification. If you have a QA team, its professionals will still be valuable when it comes to performing manual and exploratory testing, as I explained in chapter 2.
+
+Yet, to make the entire validation process quicker, despite the need for manual verification, you can take advantage of mechanisms that allow you to detect bugs earlier and minimize their impact. Such mechanisms include having monitoring in place and using feature flags to gradually roll out changes.
